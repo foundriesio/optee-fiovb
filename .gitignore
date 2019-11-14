@@ -1,0 +1,16 @@
+GPATH
+GRTAGS
+GSYMS
+GTAGS
+*.cmd
+*.d
+*.dmp
+*.elf
+*.lds
+*.map
+*.o
+*.swp
+*.ta
+cscope.*
+out/
+fiovb/host/fiovb
