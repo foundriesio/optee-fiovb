@@ -11,8 +11,8 @@
 #include <tee_client_api.h>
 #include <ta_fiovb.h>
 
-#define	CMD_PRINTENV	"fw_print"
-#define CMD_SETENV	"fw_set"
+#define	CMD_PRINTENV	"fiovb_printenv"
+#define CMD_SETENV	"fiovb_setenv"
 #define MAX_BUFFER	4096
 
 struct fiovb_ctx {
@@ -178,7 +178,7 @@ static int write_rollback_counter(uint32_t index, uint64_t value)
 	return -1;
 }
 
-static int fw_printenv(int argc, char *argv[])
+static int fiovb_printenv(int argc, char *argv[])
 {
 	uint32_t val;
 	char *p;
@@ -206,7 +206,7 @@ static int fw_printenv(int argc, char *argv[])
 	return -1;
 }
 
-int fw_setenv(int argc, char *argv[])
+int fiovb_setenv(int argc, char *argv[])
 {
 	uint32_t idx;
 	uint64_t val;
@@ -250,7 +250,7 @@ int main(int argc, char *argv[])
 		cmdname = p + 1;
 
 	if (!strncmp(cmdname, CMD_PRINTENV, strlen(CMD_PRINTENV))) {
-		if (fw_printenv (argc, argv)) {
+		if (fiovb_printenv (argc, argv)) {
 			fprintf (stderr, "Cant print the environment\n");
 			return EXIT_FAILURE;
 		}
@@ -259,7 +259,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (!strncmp(cmdname, CMD_SETENV, strlen(CMD_SETENV))) {
-		if (fw_setenv(argc, argv)) {
+		if (fiovb_setenv(argc, argv)) {
 			fprintf (stderr, "Cant set the environment\n");
 			return EXIT_FAILURE;
 		}
