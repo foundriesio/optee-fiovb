@@ -115,131 +115,20 @@ static int write_persistent_value(const char *name, const char *value)
 	return -1;
 }
 
-static int read_rollback_counter(uint32_t index)
-{
-	struct fiovb_ctx ctx;
-	TEEC_Operation op;
-	TEEC_Result res;
-	uint64_t counter;
-	uint32_t origin;
-
-	prepare_tee_session(&ctx);
-
-	memset(&op, 0, sizeof(op));
-	op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INPUT,
-					 TEEC_VALUE_OUTPUT,
-					 TEEC_NONE, TEEC_NONE);
-	op.params[0].value.a = index;
-
-	res = TEEC_InvokeCommand(&ctx.sess, TA_FIOVB_CMD_READ_ROLLBACK_INDEX,
-				 &op, &origin);
-
-	terminate_tee_session(&ctx);
-
-	if (res == TEEC_SUCCESS) {
-		counter = (uint64_t) op.params[1].value.a << 32 |
-			  (uint32_t) op.params[1].value.b;
-		fprintf(stderr, "0x%llx\n", counter);
-		return 0;
-	}
-
-	fprintf(stderr, "READ_ROLLBACK failed: 0x%x / %u\n", res, origin);
-
-	return -1;
-}
-
-static int write_rollback_counter(uint32_t index, uint64_t value)
-{
-	struct fiovb_ctx ctx;
-	TEEC_Operation op;
-	TEEC_Result res;
-	uint32_t origin;
-
-	prepare_tee_session(&ctx);
-
-	memset(&op, 0, sizeof(op));
-	op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INPUT,
-					 TEEC_VALUE_INPUT,
-					 TEEC_NONE, TEEC_NONE);
-	op.params[0].value.a = index;
-	op.params[1].value.a = (uint32_t) (value >> 32);
-	op.params[1].value.b = (uint32_t) (value);
-
-	res = TEEC_InvokeCommand(&ctx.sess, TA_FIOVB_CMD_WRITE_ROLLBACK_INDEX,
-				 &op, &origin);
-
-	terminate_tee_session(&ctx);
-
-	if (res == TEEC_SUCCESS)
-		return 0;
-
-	fprintf(stderr, "WRITE_ROLLBACK failed: 0x%x / %u\n", res, origin);
-
-	return -1;
-}
-
 static int fiovb_printenv(int argc, char *argv[])
 {
-	uint32_t val;
-	char *p;
-
-	if (argc < 2)
+	if (argc != 2)
 		return -1;
 
-	if (!strcmp(argv[1], "rollback")) {
-		if (argc != 3)
-			return -1;
-
-		errno = 0;
-		val = strtol(argv[2], &p, 16);
-		if ((errno == ERANGE && (val == LONG_MAX || val == LONG_MIN)) ||
-		    (errno != 0 && val == 0)  ||
-		    (p == argv[2]))
-			return -1;
-
-		return read_rollback_counter(val);
-	}
-
-	if (argc == 2)
-		return read_persistent_value(argv[1]);
-
-	return -1;
+	return read_persistent_value(argv[1]);
 }
 
 int fiovb_setenv(int argc, char *argv[])
 {
-	uint32_t idx;
-	uint64_t val;
-	char *p;
-
-	if (argc < 2)
+	if (argc != 3)
 		return -1;
 
-	if (!strcmp(argv[1], "rollback")) {
-		if (argc != 4)
-			return -1;
-
-		errno = 0;
-		idx = strtol(argv[2], &p, 16);
-		if ((errno == ERANGE && (idx == LONG_MAX || idx == LONG_MIN)) ||
-		    (errno != 0 && idx == 0)  ||
-		    (p == argv[2]))
-			return -1;
-
-		errno = 0;
-		val = strtoll(argv[3], &p, 16);
-		if ((errno == ERANGE && (val == LLONG_MAX || val == LLONG_MIN)) ||
-		    (errno != 0 && val == 0)  ||
-		    (p == argv[3]))
-			return -1;
-
-		return write_rollback_counter(idx, val);
-	}
-
-	if (argc == 3)
-		return write_persistent_value(argv[1], argv[2]);
-
-	return -1;
+	return write_persistent_value(argv[1], argv[2]);
 }
 
 int main(int argc, char *argv[])
