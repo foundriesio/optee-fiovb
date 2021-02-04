@@ -13,6 +13,7 @@
 
 #define	CMD_PRINTENV	"fiovb_printenv"
 #define CMD_SETENV	"fiovb_setenv"
+#define CMD_DELENV	"fiovb_delenv"
 #define MAX_BUFFER	4096
 
 struct fiovb_ctx {
@@ -150,6 +151,59 @@ static int write_persistent_value(const char *name, const char *value)
 	return ret;
 }
 
+static int delete_persistent_value(const char *name)
+{
+	char req1[MAX_BUFFER] = { '\0' };
+
+	struct fiovb_ctx ctx;
+	TEEC_Operation op;
+	TEEC_Result res;
+	uint32_t origin;
+	int ret;
+
+	if (strlen(name) >= sizeof(req1)) {
+		fprintf(stderr, "Name value too large (should be up to %ld)\n",
+				sizeof(req1));
+		return -EINVAL;
+	}
+
+	prepare_tee_session(&ctx);
+
+	strncpy(req1, name, MAX_BUFFER - 1);
+	memset(&op, 0, sizeof(op));
+	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
+					 TEEC_NONE, TEEC_NONE, TEEC_NONE);
+	op.params[0].tmpref.buffer = req1;
+	op.params[0].tmpref.size = strlen(req1) + 1;
+
+	res = TEEC_InvokeCommand(&ctx.sess, TA_FIOVB_CMD_DELETE_PERSIST_VALUE,
+				 &op, &origin);
+
+	terminate_tee_session(&ctx);
+
+	if (res == TEEC_SUCCESS)
+		return 0;
+
+	switch (res) {
+	case TEEC_ERROR_BAD_PARAMETERS:
+		ret = -EINVAL;
+		break;
+	case TEEC_ERROR_ITEM_NOT_FOUND:
+		ret = -ENOENT;
+		break;
+	case TEEC_ERROR_STORAGE_NOT_AVAILABLE:
+		ret = -EIO;
+		break;
+	default:
+		ret = -ENOEXEC;
+	}
+
+	fprintf(stderr, "Delete persistent value for %s failed: %s\n", name,
+				strerror(-ret));
+
+	return ret;
+}
+
 static int fiovb_printenv(int argc, char *argv[])
 {
 	if (argc != 2)
@@ -164,6 +218,14 @@ int fiovb_setenv(int argc, char *argv[])
 		return -1;
 
 	return write_persistent_value(argv[1], argv[2]);
+}
+
+int fiovb_delenv(int argc, char *argv[])
+{
+	if (argc != 2)
+		return -1;
+
+	return delete_persistent_value(argv[1]);
 }
 
 int main(int argc, char *argv[])
@@ -191,9 +253,19 @@ int main(int argc, char *argv[])
 		return EXIT_SUCCESS;
 	}
 
+	if (!strncmp(cmdname, CMD_DELENV, strlen(CMD_DELENV))) {
+		if (fiovb_delenv(argc, argv)) {
+			fprintf (stderr, "Cant delete the environment\n");
+			return EXIT_FAILURE;
+		}
+
+		return EXIT_SUCCESS;
+	}
+
 	fprintf (stderr,
 		"Identity crisis - may be called as `" CMD_PRINTENV
-		"' or as `" CMD_SETENV "' but not as `%s'\n", argv[0]);
+		"', as `" CMD_SETENV "' or as `" CMD_DELENV
+		"', but not as `%s'\n", argv[0]);
 
 	return EXIT_FAILURE;
 }
