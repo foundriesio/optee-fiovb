@@ -70,7 +70,7 @@ static int read_persistent_value(const char *s)
 	terminate_tee_session(&ctx);
 
 	if (res == TEEC_SUCCESS) {
-		fprintf(stderr, "%s\n", rsp);
+		fprintf(stdout, "%s\n", rsp);
 		return 0;
 	}
 		
