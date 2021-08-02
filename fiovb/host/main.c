@@ -54,7 +54,7 @@ static int read_persistent_value(const char *s)
 
 	prepare_tee_session(&ctx);
 
-	strcpy(req, s);
+	strncpy(req, s, MAX_BUFFER - 1);
 	memset(&op, 0, sizeof(op));
 	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
 					 TEEC_MEMREF_TEMP_INOUT,
@@ -91,8 +91,8 @@ static int write_persistent_value(const char *name, const char *value)
 
 	prepare_tee_session(&ctx);
 
-	strcpy(req1, name);
-	strcpy(req2, value);
+	strncpy(req1, name, MAX_BUFFER - 1);
+	strncpy(req2, value, MAX_BUFFER - 1);
 	memset(&op, 0, sizeof(op));
 	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
 					 TEEC_MEMREF_TEMP_INPUT,
