@@ -43,7 +43,7 @@ void terminate_tee_session(struct fiovb_ctx *ctx)
 	TEEC_FinalizeContext(&ctx->ctx);
 }
 
-static int read_persistent_value(const char *s)
+static int read_persistent_value(const char *name)
 {
 	char req[MAX_BUFFER] = { '\0' };
 	char rsp[MAX_BUFFER] = { '\0' };
@@ -51,10 +51,11 @@ static int read_persistent_value(const char *s)
 	TEEC_Operation op;
 	TEEC_Result res;
 	uint32_t origin;
+	int ret;
 
 	prepare_tee_session(&ctx);
 
-	strncpy(req, s, MAX_BUFFER - 1);
+	strncpy(req, name, MAX_BUFFER - 1);
 	memset(&op, 0, sizeof(op));
 	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
 					 TEEC_MEMREF_TEMP_INOUT,
@@ -73,10 +74,28 @@ static int read_persistent_value(const char *s)
 		fprintf(stdout, "%s\n", rsp);
 		return 0;
 	}
-		
-	fprintf(stderr, "READ_PVALUE failed: 0x%x / %u\n", res, origin);
 
-	return -1;
+	switch (res) {
+	case TEEC_ERROR_BAD_PARAMETERS:
+		ret = -EINVAL;
+		break;
+	case TEEC_ERROR_OUT_OF_MEMORY:
+		ret = -ENOMEM;
+		break;
+	case TEEC_ERROR_ITEM_NOT_FOUND:
+		ret = -ENOENT;
+		break;
+	case TEEC_ERROR_STORAGE_NOT_AVAILABLE:
+		ret = -EIO;
+		break;
+	default:
+		ret = -ENOEXEC;
+	}
+
+	fprintf(stderr, "Read persistent value for %s failed: %s\n", name,
+				strerror(-ret));
+
+	return ret;
 }
 
 static int write_persistent_value(const char *name, const char *value)
@@ -88,6 +107,7 @@ static int write_persistent_value(const char *name, const char *value)
 	TEEC_Operation op;
 	TEEC_Result res;
 	uint32_t origin;
+	int ret;
 
 	prepare_tee_session(&ctx);
 
@@ -110,9 +130,24 @@ static int write_persistent_value(const char *name, const char *value)
 	if (res == TEEC_SUCCESS)
 		return 0;
 
-	fprintf(stderr, "WRITE_PVALUE failed: 0x%x / %u\n", res, origin);
+	switch (res) {
+	case TEEC_ERROR_BAD_PARAMETERS:
+		ret = -EINVAL;
+		break;
+	case TEEC_ERROR_OUT_OF_MEMORY:
+		ret = -ENOMEM;
+		break;
+	case TEEC_ERROR_STORAGE_NOT_AVAILABLE:
+		ret = -EIO;
+		break;
+	default:
+		ret = -ENOEXEC;
+	}
 
-	return -1;
+	fprintf(stderr, "Write persistent value for %s failed: %s\n", name,
+				strerror(-ret));
+
+	return ret;
 }
 
 static int fiovb_printenv(int argc, char *argv[])
