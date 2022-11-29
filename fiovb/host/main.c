@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include <tee_client_api.h>
 #include <ta_fiovb.h>
@@ -231,6 +232,11 @@ int fiovb_delenv(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
 	char *p, *cmdname = *argv;
+
+	if (geteuid() != 0) {
+		fprintf(stderr, "Invalid access level, please use sudo\n");
+		return EXIT_FAILURE;
+	}
 
 	if ((p = strrchr (cmdname, '/')) != NULL)
 		cmdname = p + 1;
