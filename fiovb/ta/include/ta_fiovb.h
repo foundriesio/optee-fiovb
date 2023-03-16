@@ -13,6 +13,14 @@
 			    "bootupgrade_primary_updated", "bootfirmware_version", \
 			    "is_secondary_boot", "debug"}
 
+#define OTP_PERSIST_VALUE_LIST {"rollback_protection"}
+
+enum persist_value_type {
+	REGULAR = 0,
+	OTP,
+	VENDOR
+};
+
 /*
  * Reads a persistent value corresponding to the given name.
  *

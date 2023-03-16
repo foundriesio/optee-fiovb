@@ -42,17 +42,37 @@ static TEE_Result get_named_object_name(char *name_orig,
 	return TEE_SUCCESS;
 }
 
-static TEE_Result check_valid_value(char *val)
+static TEE_Result check_valid_value(char *val, enum persist_value_type type)
 {
 	const char *valid_values[] = PERSIST_VALUE_LIST;
+	const char *otp_valid_values[] = OTP_PERSIST_VALUE_LIST;
+	char *tmp;
+	int count;
+
 	unsigned int i;
 
-	/* Allow vendor variables */
-	if (!strncmp(val, vendor_prefix, strlen(vendor_prefix)))
-		return TEE_SUCCESS;
+	switch (type) {
+	case REGULAR:
+		tmp = valid_values;
+		count = ARRAY_SIZE(valid_values);
+		break;
+	case OTP:
+		tmp = otp_valid_values;
+		count = ARRAY_SIZE(otp_valid_values);
+		break;
+	case VENDOR:
+		/* Allow vendor variables */
+		if (!strncmp(val, vendor_prefix, strlen(vendor_prefix)))
+			return TEE_SUCCESS;
+		else
+			return TEE_ERROR_ITEM_NOT_FOUND;
+		break;
+	default:
+		return TEE_ERROR_NOT_IMPLEMENTED;
+	}
 
-	for (i = 0; i < ARRAY_SIZE(valid_values); i++) {
-		if (strcmp(val, valid_values[i]) == 0)
+	for (i = 0; i < count; i++) {
+		if (strcmp(val, tmp[i]) == 0)
 			return TEE_SUCCESS;
 	}
 
@@ -87,15 +107,17 @@ static TEE_Result write_persist_value(uint32_t pt,
 	name_buf = params[0].memref.buffer;
 	name_buf_sz = params[0].memref.size;
 
-	if (check_valid_value(name_buf) != TEE_SUCCESS) {
+	if (check_valid_value(name_buf, REGULAR) != TEE_SUCCESS) {
 		EMSG("Not found %s", name_buf);
 		return TEE_ERROR_BAD_PARAMETERS;
 	}
 
-	/* Vendor variables should not be allowed to be overwritten */
-	if (strncmp(name_buf, vendor_prefix, strlen(vendor_prefix)))
+	/* Vendor and OTP variables should not be allowed to be overwritten */
+	if (!check_valid_value(name_buf, OTP) ||
+	    !check_valid_value(name_buf, VENDOR)) {
 		flags |= TEE_DATA_FLAG_ACCESS_WRITE |
 			 TEE_DATA_FLAG_OVERWRITE;
+	}
 
 	value_sz = params[1].memref.size;
 	value = TEE_Malloc(value_sz, 0);
@@ -151,7 +173,7 @@ static TEE_Result read_persist_value(uint32_t pt,
 	name_buf = params[0].memref.buffer;
 	name_buf_sz = params[0].memref.size;
 
-	if (check_valid_value(name_buf) != TEE_SUCCESS) {
+	if (check_valid_value(name_buf, REGULAR) != TEE_SUCCESS) {
 		EMSG("Not found %s", name_buf);
 		return TEE_ERROR_BAD_PARAMETERS;
 	}
@@ -212,6 +234,12 @@ static TEE_Result delete_persist_value(uint32_t pt,
 
 	name_buf = params[0].memref.buffer;
 	name_buf_sz = params[0].memref.size;
+
+	/* Vendor and OTP variables should not be allowed to be deleted */
+	if (!check_valid_value(name_buf, OTP) ||
+	    !check_valid_value(name_buf, VENDOR)) {
+		return TEE_ERROR_ACCESS_CONFLICT;
+	}
 
 	res = get_named_object_name(name_buf, name_buf_sz,
 				    name_full, &name_full_sz);
