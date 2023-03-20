@@ -6,10 +6,12 @@
 #include <tee_internal_api.h>
 #include <tee_internal_api_extensions.h>
 
+#include <stdlib.h>
 #include <string.h>
 #include <util.h>
 
 #define DEFAULT_LOCK_STATE	0
+#define MAX_SIMPLE_VALUE_SIZE	64
 
 static const uint32_t storageid = TEE_STORAGE_PRIVATE_RPMB;
 static const char *named_value_prefix = "named_value_";
@@ -160,6 +162,66 @@ static TEE_Result delete_value(char *name, size_t name_sz)
 	return res;
 }
 
+static bool is_rollback_protected(void)
+{
+	TEE_Result res = TEE_SUCCESS;
+	uint32_t value_sz = MAX_SIMPLE_VALUE_SIZE;
+	char value[MAX_SIMPLE_VALUE_SIZE];
+	uint32_t count;
+
+	res = read_value(ROLLBACK_PROT, strlen(ROLLBACK_PROT) + 1,
+			value, value_sz, &count);
+	if (res == TEE_SUCCESS) {
+		DMSG("Found %s, rollback protection is enabled",
+		      ROLLBACK_PROT);
+		return true;
+	}
+
+	return false;
+}
+
+static bool is_version_incremental(char *new_ver_str,
+				   uint32_t new_ver_sz)
+{
+	TEE_Result res = TEE_SUCCESS;
+	char value[MAX_SIMPLE_VALUE_SIZE];
+	uint32_t count;
+	uint64_t current_ver, new_ver;
+
+	res = read_value(BOOTFIRM_VER, strlen(BOOTFIRM_VER) + 1,
+			value, MAX_SIMPLE_VALUE_SIZE, &count);
+	if (res == TEE_ERROR_ITEM_NOT_FOUND) {
+		DMSG("Not found %s, writing firmware version first time",
+		     BOOTFIRM_VER);
+		return true;
+	}
+
+	if (res == TEE_SUCCESS) {
+		current_ver = strtoul(value, NULL, 10);
+		new_ver = strtoul(new_ver_str, NULL, 10);
+
+		DMSG("Trying to update boot firmware version, old = %"PRIu64
+		     " new = %"PRIu64, current_ver, new_ver);
+		if (new_ver >= current_ver)
+			return true;
+	}
+
+	return false;
+}
+
+static TEE_Result increase_boot_firmware(char *new_ver_str,
+					 uint32_t new_ver_sz)
+{
+	if (is_rollback_protected() &&
+	    !is_version_incremental(new_ver_str, new_ver_sz)) {
+		EMSG("Boot firmware version update is not permitted");
+		return TEE_ERROR_ACCESS_DENIED;
+	}
+
+	return write_value(BOOTFIRM_VER, strlen(BOOTFIRM_VER) + 1,
+			   new_ver_str, new_ver_sz, true);
+}
+
 static TEE_Result write_persist_value(uint32_t pt,
 				      TEE_Param params[TEE_NUM_PARAMS])
 {
@@ -172,7 +234,7 @@ static TEE_Result write_persist_value(uint32_t pt,
 	uint32_t value_sz = 0;
 	char *name_buf = NULL;
 	char *value = NULL;
-	bool overwrite = false;
+	bool overwrite = true;
 
 	if (pt != exp_pt)
 		return TEE_ERROR_BAD_PARAMETERS;
@@ -185,9 +247,13 @@ static TEE_Result write_persist_value(uint32_t pt,
 		return TEE_ERROR_BAD_PARAMETERS;
 	}
 
-	/* Vendor variables should not be allowed to be overwritten */
-	if (strncmp(name_buf, vendor_prefix, strlen(vendor_prefix)))
-		overwrite = true;
+	/*
+	 * Vendor variables and rollback_protection should not be
+	 * allowed to be overwritten
+	 */
+	if (!strncmp(name_buf, vendor_prefix, strlen(vendor_prefix)) ||
+	    !strncmp(name_buf, ROLLBACK_PROT, strlen(ROLLBACK_PROT)))
+		overwrite = false;
 
 	value_sz = params[1].memref.size;
 	value = TEE_Malloc(value_sz, 0);
@@ -197,8 +263,14 @@ static TEE_Result write_persist_value(uint32_t pt,
 	TEE_MemMove(value, params[1].memref.buffer,
 		    value_sz);
 
-	res = write_value(name_buf, name_buf_sz,
-			  value, value_sz, overwrite);
+	if (strncmp(name_buf, BOOTFIRM_VER, strlen(BOOTFIRM_VER))) {
+		res = write_value(name_buf, name_buf_sz,
+				  value, value_sz, overwrite);
+	} else {
+		/* Handle bootfirmware version change */
+		res = increase_boot_firmware(value, value_sz);
+	}
+
 	TEE_Free(value);
 
 	return res;
@@ -262,6 +334,14 @@ static TEE_Result delete_persist_value(uint32_t pt,
 
 	name_buf = params[0].memref.buffer;
 	name_buf_sz = params[0].memref.size;
+
+	/*
+	 * Vendor variables and rollback_protection should not be
+	 * allowed to be deleted
+	 */
+	if (!strncmp(name_buf, vendor_prefix, strlen(vendor_prefix)) ||
+	    !strncmp(name_buf, ROLLBACK_PROT, strlen(ROLLBACK_PROT)))
+		return TEE_ERROR_ACCESS_DENIED;
 
 	res = delete_value(name_buf, name_buf_sz);
 

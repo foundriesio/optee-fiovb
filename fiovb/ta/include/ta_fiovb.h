@@ -8,10 +8,12 @@
 #define TA_FIOVB_UUID {0x22250a54, 0x0bf1, 0x48fe, \
 		      { 0x80, 0x02, 0x7b, 0x20, 0xf1, 0xc9, 0xc9, 0xb1 } }
 
+#define ROLLBACK_PROT		"rollback_protection"
+#define BOOTFIRM_VER		"bootfirmware_version"
 #define PERSIST_VALUE_LIST {"bootcount", "upgrade_available", "rollback", \
 			    "m4hash", "m4size", "m4_update", "bootupgrade_available", \
-			    "bootupgrade_primary_updated", "bootfirmware_version", \
-			    "is_secondary_boot", "debug"}
+			    "bootupgrade_primary_updated", BOOTFIRM_VER, \
+			    "is_secondary_boot", "debug", ROLLBACK_PROT}
 
 /*
  * Reads a persistent value corresponding to the given name.
