@@ -59,6 +59,107 @@ static TEE_Result check_valid_value(char *val)
 	return TEE_ERROR_ITEM_NOT_FOUND;
 }
 
+static TEE_Result write_value(char *name, uint32_t name_sz,
+			      char *value, uint32_t value_sz,
+			      bool overwrite)
+{
+	TEE_ObjectHandle h = TEE_HANDLE_NULL;
+	TEE_Result res = TEE_SUCCESS;
+	char name_full[TEE_OBJECT_ID_MAX_LEN] = { };
+	uint32_t name_full_sz = 0;
+#ifdef CFG_FIOVB_VENDOR_CREATE
+	uint32_t flags = TEE_DATA_FLAG_ACCESS_READ |
+			 TEE_DATA_FLAG_ACCESS_WRITE;
+#else
+	uint32_t flags = TEE_DATA_FLAG_ACCESS_READ;
+#endif
+
+	if (overwrite)
+		flags |= TEE_DATA_FLAG_ACCESS_WRITE |
+			 TEE_DATA_FLAG_OVERWRITE;
+
+	res = get_named_object_name(name, name_sz,
+				    name_full, &name_full_sz);
+	if (res)
+		return res;
+
+	res = TEE_CreatePersistentObject(storageid, name_full,
+					 name_full_sz,
+					 flags, NULL, value,
+					 value_sz, &h);
+	if (res == TEE_ERROR_ACCESS_CONFLICT)
+		EMSG("Can't update named object '%s' value, res = 0x%x",
+		     name, res);
+	else if (res)
+		EMSG("Can't create named object '%s' value, res = 0x%x",
+		     name, res);
+
+	TEE_CloseObject(h);
+
+	return res;
+}
+
+static TEE_Result read_value(char *name, uint32_t name_sz,
+			     char *value, uint32_t value_sz,
+			     uint32_t *count)
+{
+	TEE_ObjectHandle h = TEE_HANDLE_NULL;
+	TEE_Result res = TEE_SUCCESS;
+	uint32_t flags = TEE_DATA_FLAG_ACCESS_READ |
+			 TEE_DATA_FLAG_ACCESS_WRITE;
+	char name_full[TEE_OBJECT_ID_MAX_LEN];
+	uint32_t name_full_sz = 0;
+
+	res = get_named_object_name(name, name_sz,
+				    name_full, &name_full_sz);
+	if (res)
+		return res;
+
+	res = TEE_OpenPersistentObject(storageid, name_full,
+				       name_full_sz, flags, &h);
+	if (res) {
+		EMSG("Can't open named object '%s' value, res = 0x%x", name, res);
+		return res;
+	}
+
+	res =  TEE_ReadObjectData(h, value, value_sz, count);
+	if (res) {
+		EMSG("Can't read named object '%s' value, res = 0x%x", name, res);
+	}
+
+	TEE_CloseObject(h);
+
+	return res;
+}
+
+static TEE_Result delete_value(char *name, size_t name_sz)
+{
+	TEE_ObjectHandle h = TEE_HANDLE_NULL;
+	TEE_Result res = TEE_SUCCESS;
+	const uint32_t flags = TEE_DATA_FLAG_ACCESS_READ |
+			       TEE_DATA_FLAG_ACCESS_WRITE_META;
+	char name_full[TEE_OBJECT_ID_MAX_LEN] = { };
+	uint32_t name_full_sz = 0;
+
+	res = get_named_object_name(name, name_sz,
+				    name_full, &name_full_sz);
+	if (res)
+		return res;
+
+	res = TEE_OpenPersistentObject(storageid, name_full,
+				       name_full_sz, flags, &h);
+	if (res) {
+		EMSG("Failed to open persistent object, res = 0x%x", res);
+		return res;
+	}
+
+	res = TEE_CloseAndDeletePersistentObject1(h);
+	if (res)
+		EMSG("Failed to delete persistent object, res = 0x%x", res);
+
+	return res;
+}
+
 static TEE_Result write_persist_value(uint32_t pt,
 				      TEE_Param params[TEE_NUM_PARAMS])
 {
@@ -66,20 +167,12 @@ static TEE_Result write_persist_value(uint32_t pt,
 						TEE_PARAM_TYPE_MEMREF_INPUT,
 						TEE_PARAM_TYPE_NONE,
 						TEE_PARAM_TYPE_NONE);
-#ifdef CFG_FIOVB_VENDOR_CREATE
-	uint32_t flags = TEE_DATA_FLAG_ACCESS_READ |
-			 TEE_DATA_FLAG_ACCESS_WRITE;
-#else
-	uint32_t flags = TEE_DATA_FLAG_ACCESS_READ;
-#endif
-	char name_full[TEE_OBJECT_ID_MAX_LEN] = { };
-	TEE_ObjectHandle h = TEE_HANDLE_NULL;
 	TEE_Result res = TEE_SUCCESS;
-	uint32_t name_full_sz = 0;
 	uint32_t name_buf_sz = 0;
 	uint32_t value_sz = 0;
 	char *name_buf = NULL;
 	char *value = NULL;
+	bool overwrite = false;
 
 	if (pt != exp_pt)
 		return TEE_ERROR_BAD_PARAMETERS;
@@ -94,8 +187,7 @@ static TEE_Result write_persist_value(uint32_t pt,
 
 	/* Vendor variables should not be allowed to be overwritten */
 	if (strncmp(name_buf, vendor_prefix, strlen(vendor_prefix)))
-		flags |= TEE_DATA_FLAG_ACCESS_WRITE |
-			 TEE_DATA_FLAG_OVERWRITE;
+		overwrite = true;
 
 	value_sz = params[1].memref.size;
 	value = TEE_Malloc(value_sz, 0);
@@ -105,22 +197,8 @@ static TEE_Result write_persist_value(uint32_t pt,
 	TEE_MemMove(value, params[1].memref.buffer,
 		    value_sz);
 
-	res = get_named_object_name(name_buf, name_buf_sz,
-				    name_full, &name_full_sz);
-	if (res)
-		goto out;
-
-	res = TEE_CreatePersistentObject(storageid, name_full,
-					 name_full_sz,
-					 flags, NULL, value,
-					 value_sz, &h);
-	if (res == TEE_ERROR_ACCESS_CONFLICT)
-		EMSG("Can't update named object '%s' value, res = 0x%x", name_buf, res);
-	else if (res)
-		EMSG("Can't create named object '%s' value, res = 0x%x", name_buf, res);
-
-	TEE_CloseObject(h);
-out:
+	res = write_value(name_buf, name_buf_sz,
+			  value, value_sz, overwrite);
 	TEE_Free(value);
 
 	return res;
@@ -133,12 +211,7 @@ static TEE_Result read_persist_value(uint32_t pt,
 						TEE_PARAM_TYPE_MEMREF_INOUT,
 						TEE_PARAM_TYPE_NONE,
 						TEE_PARAM_TYPE_NONE);
-	uint32_t flags = TEE_DATA_FLAG_ACCESS_READ |
-			 TEE_DATA_FLAG_ACCESS_WRITE;
 	TEE_Result res = TEE_SUCCESS;
-	TEE_ObjectHandle h = TEE_HANDLE_NULL;
-	char name_full[TEE_OBJECT_ID_MAX_LEN];
-	uint32_t name_full_sz = 0;
 	uint32_t name_buf_sz = 0;
 	char *name_buf = NULL;
 	uint32_t value_sz = 0;
@@ -161,31 +234,13 @@ static TEE_Result read_persist_value(uint32_t pt,
 	if (!value)
 		return TEE_ERROR_OUT_OF_MEMORY;
 
-	res = get_named_object_name(name_buf, name_buf_sz,
-				    name_full, &name_full_sz);
-	if (res)
-		goto out_free;
-
-	res = TEE_OpenPersistentObject(storageid, name_full,
-				       name_full_sz, flags, &h);
-	if (res) {
-		EMSG("Can't open named object '%s' value, res = 0x%x", name_buf, res);
-		goto out_free;
-	}
-
-	res =  TEE_ReadObjectData(h, value, value_sz, &count);
-	if (res) {
-		EMSG("Can't read named object '%s' value, res = 0x%x", name_buf, res);
-		goto out;
-	}
+	res = read_value(name_buf, name_buf_sz, value, value_sz, &count);
 
 	TEE_MemMove(params[1].memref.buffer, value,
 		    value_sz);
 
 	params[1].memref.size = count;
-out:
-	TEE_CloseObject(h);
-out_free:
+
 	TEE_Free(value);
 
 	return res;
@@ -198,12 +253,7 @@ static TEE_Result delete_persist_value(uint32_t pt,
 						TEE_PARAM_TYPE_NONE,
 						TEE_PARAM_TYPE_NONE,
 						TEE_PARAM_TYPE_NONE);
-	const uint32_t flags = TEE_DATA_FLAG_ACCESS_READ |
-			       TEE_DATA_FLAG_ACCESS_WRITE_META;
 	TEE_Result res;
-	TEE_ObjectHandle h;
-	char name_full[TEE_OBJECT_ID_MAX_LEN];
-	uint32_t name_full_sz;
 	char *name_buf;
 	size_t name_buf_sz;
 
@@ -213,21 +263,7 @@ static TEE_Result delete_persist_value(uint32_t pt,
 	name_buf = params[0].memref.buffer;
 	name_buf_sz = params[0].memref.size;
 
-	res = get_named_object_name(name_buf, name_buf_sz,
-				    name_full, &name_full_sz);
-	if (res)
-		return res;
-
-	res = TEE_OpenPersistentObject(storageid, name_full,
-				       name_full_sz, flags, &h);
-	if (res) {
-		EMSG("Failed to open persistent object, res = 0x%x", res);
-		return res;
-	}
-
-	res = TEE_CloseAndDeletePersistentObject1(h);
-	if (res)
-		EMSG("Failed to delete persistent object, res = 0x%x", res);
+	res = delete_value(name_buf, name_buf_sz);
 
 	return res;
 }
