@@ -120,7 +120,7 @@ static TEE_Result read_value(char *name, uint32_t name_sz,
 	res = TEE_OpenPersistentObject(storageid, name_full,
 				       name_full_sz, flags, &h);
 	if (res) {
-		EMSG("Can't open named object '%s' value, res = 0x%x", name, res);
+		DMSG("Can't open named object '%s' value, res = 0x%x", name, res);
 		return res;
 	}
 
