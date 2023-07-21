@@ -22,6 +22,11 @@ struct fiovb_ctx {
 	TEEC_Session sess;
 };
 
+static inline bool is_string(const char *var, size_t len)
+{
+	return strnlen(var, len) && (len != strnlen(var, len));
+}
+
 void prepare_tee_session(struct fiovb_ctx *ctx)
 {
 	TEEC_UUID uuid = TA_FIOVB_UUID;
@@ -47,17 +52,22 @@ void terminate_tee_session(struct fiovb_ctx *ctx)
 
 static int read_persistent_value(const char *name)
 {
-	char req[MAX_BUFFER] = { '\0' };
-	char rsp[MAX_BUFFER] = { '\0' };
+	char req[MAX_BUFFER];
+	char rsp[MAX_BUFFER];
 	struct fiovb_ctx ctx;
 	TEEC_Operation op;
 	TEEC_Result res;
 	uint32_t origin;
 	int ret;
 
+	if (!is_string(name, MAX_BUFFER)) {
+		fprintf(stderr, "Invalid name\n");
+		return -EINVAL;
+	}
+
 	prepare_tee_session(&ctx);
 
-	strncpy(req, name, MAX_BUFFER - 1);
+	strncpy(req, name, MAX_BUFFER);
 	memset(&op, 0, sizeof(op));
 	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
 					 TEEC_MEMREF_TEMP_INOUT,
@@ -65,7 +75,7 @@ static int read_persistent_value(const char *name)
 	op.params[0].tmpref.buffer = req;
 	op.params[0].tmpref.size = strlen(req) + 1;
 	op.params[1].tmpref.buffer = rsp;
-	op.params[1].tmpref.size = MAX_BUFFER - 1;
+	op.params[1].tmpref.size = MAX_BUFFER;
 
 	res = TEEC_InvokeCommand(&ctx.sess, TA_FIOVB_CMD_READ_PERSIST_VALUE,
 				 &op, &origin);
@@ -102,19 +112,23 @@ static int read_persistent_value(const char *name)
 
 static int write_persistent_value(const char *name, const char *value)
 {
-	char req1[MAX_BUFFER] = { '\0' };
-	char req2[MAX_BUFFER] = { '\0' };
-
+	char req1[MAX_BUFFER];
+	char req2[MAX_BUFFER];
 	struct fiovb_ctx ctx;
 	TEEC_Operation op;
 	TEEC_Result res;
 	uint32_t origin;
 	int ret;
 
+	if (!is_string(name, MAX_BUFFER) || !is_string(value, MAX_BUFFER)) {
+		fprintf(stderr, "Invalid name or value\n");
+		return -EINVAL;
+	}
+
 	prepare_tee_session(&ctx);
 
-	strncpy(req1, name, MAX_BUFFER - 1);
-	strncpy(req2, value, MAX_BUFFER - 1);
+	strncpy(req1, name, MAX_BUFFER);
+	strncpy(req2, value, MAX_BUFFER);
 	memset(&op, 0, sizeof(op));
 	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
 					 TEEC_MEMREF_TEMP_INPUT,
@@ -154,23 +168,21 @@ static int write_persistent_value(const char *name, const char *value)
 
 static int delete_persistent_value(const char *name)
 {
-	char req1[MAX_BUFFER] = { '\0' };
-
+	char req1[MAX_BUFFER];
 	struct fiovb_ctx ctx;
 	TEEC_Operation op;
 	TEEC_Result res;
 	uint32_t origin;
 	int ret;
 
-	if (strlen(name) >= sizeof(req1)) {
-		fprintf(stderr, "Name value too large (should be up to %ld)\n",
-				sizeof(req1));
+	if (!is_string(name, MAX_BUFFER)) {
+		fprintf(stderr, "Invalid name\n");
 		return -EINVAL;
 	}
 
 	prepare_tee_session(&ctx);
 
-	strncpy(req1, name, MAX_BUFFER - 1);
+	strncpy(req1, name, MAX_BUFFER);
 	memset(&op, 0, sizeof(op));
 	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
 					 TEEC_NONE, TEEC_NONE, TEEC_NONE);
@@ -275,4 +287,3 @@ int main(int argc, char *argv[])
 
 	return EXIT_FAILURE;
 }
-
