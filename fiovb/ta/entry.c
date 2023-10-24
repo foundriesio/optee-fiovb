@@ -336,11 +336,9 @@ static TEE_Result delete_persist_value(uint32_t pt,
 	name_buf_sz = params[0].memref.size;
 
 	/*
-	 * Vendor variables and rollback_protection should not be
-	 * allowed to be deleted
+	 * rollback_protection should not be allowed to be deleted
 	 */
-	if (!strncmp(name_buf, vendor_prefix, strlen(vendor_prefix)) ||
-	    !strncmp(name_buf, ROLLBACK_PROT, strlen(ROLLBACK_PROT)))
+	if (!strncmp(name_buf, ROLLBACK_PROT, strlen(ROLLBACK_PROT)))
 		return TEE_ERROR_ACCESS_DENIED;
 
 	res = delete_value(name_buf, name_buf_sz);
