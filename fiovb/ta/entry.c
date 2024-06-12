@@ -2,6 +2,7 @@
 /* Copyright (c) 2018, Linaro Limited */
 /* Copyright (c) 2019, Foundries.IO */
 
+#include <config.h>
 #include <ta_fiovb.h>
 #include <tee_internal_api.h>
 #include <tee_internal_api_extensions.h>
@@ -263,7 +264,14 @@ static TEE_Result write_persist_value(uint32_t pt,
 	TEE_MemMove(value, params[1].memref.buffer,
 		    value_sz);
 
-	if (strncmp(name_buf, BOOTFIRM_VER, strlen(BOOTFIRM_VER))) {
+	if (!strncmp(name_buf, vendor_prefix, strlen(vendor_prefix)) &&
+	    !IS_ENABLED(CFG_FIOVB_VENDOR_CREATE)) {
+		res = TEE_ERROR_BAD_PARAMETERS;
+
+		/* Don't create vendor variables */
+		EMSG("Can't create object '%s', CFG_FIOVB_VENDOR_CREATE not set",
+		     name_buf);
+	} else if (strncmp(name_buf, BOOTFIRM_VER, strlen(BOOTFIRM_VER))) {
 		res = write_value(name_buf, name_buf_sz,
 				  value, value_sz, overwrite);
 	} else {
