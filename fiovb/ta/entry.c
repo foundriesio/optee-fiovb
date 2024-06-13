@@ -20,8 +20,6 @@ static const char *named_value_prefix = "named_value_";
 /* Prefix used for vendor variables */
 #ifdef CFG_FIOVB_VENDOR_PREFIX
 static const char *vendor_prefix = TO_STR(CFG_FIOVB_VENDOR_PREFIX) "_";
-#else
-static const char *vendor_prefix = "vendor_";
 #endif
 
 static TEE_Result get_named_object_name(char *name_orig,
@@ -50,9 +48,11 @@ static TEE_Result check_valid_value(char *val)
 	const char *valid_values[] = PERSIST_VALUE_LIST;
 	unsigned int i;
 
-	/* Allow vendor variables */
+#ifdef CFG_FIOVB_VENDOR_PREFIX
+	/* Allow vendor variables as CFG_FIOVB_VENDOR_PREFIX is set */
 	if (!strncmp(val, vendor_prefix, strlen(vendor_prefix)))
 		return TEE_SUCCESS;
+#endif
 
 	for (i = 0; i < ARRAY_SIZE(valid_values); i++) {
 		if (strcmp(val, valid_values[i]) == 0)
@@ -252,8 +252,12 @@ static TEE_Result write_persist_value(uint32_t pt,
 	 * Vendor variables and rollback_protection should not be
 	 * allowed to be overwritten
 	 */
-	if (!strncmp(name_buf, vendor_prefix, strlen(vendor_prefix)) ||
-	    !strncmp(name_buf, ROLLBACK_PROT, strlen(ROLLBACK_PROT)))
+#ifdef CFG_FIOVB_VENDOR_PREFIX
+	if (!strncmp(name_buf, vendor_prefix, strlen(vendor_prefix)))
+		overwrite = false;
+#endif
+
+	if (!strncmp(name_buf, ROLLBACK_PROT, strlen(ROLLBACK_PROT)))
 		overwrite = false;
 
 	value_sz = params[1].memref.size;
@@ -264,6 +268,7 @@ static TEE_Result write_persist_value(uint32_t pt,
 	TEE_MemMove(value, params[1].memref.buffer,
 		    value_sz);
 
+#ifdef CFG_FIOVB_VENDOR_PREFIX
 	if (!strncmp(name_buf, vendor_prefix, strlen(vendor_prefix)) &&
 	    !IS_ENABLED(CFG_FIOVB_VENDOR_CREATE)) {
 		res = TEE_ERROR_BAD_PARAMETERS;
@@ -271,7 +276,9 @@ static TEE_Result write_persist_value(uint32_t pt,
 		/* Don't create vendor variables */
 		EMSG("Can't create object '%s', CFG_FIOVB_VENDOR_CREATE not set",
 		     name_buf);
-	} else if (strncmp(name_buf, BOOTFIRM_VER, strlen(BOOTFIRM_VER))) {
+	} else
+#endif
+	if (strncmp(name_buf, BOOTFIRM_VER, strlen(BOOTFIRM_VER))) {
 		res = write_value(name_buf, name_buf_sz,
 				  value, value_sz, overwrite);
 	} else {
