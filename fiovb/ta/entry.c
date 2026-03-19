@@ -104,7 +104,7 @@ static TEE_Result write_value(char *name, uint32_t name_sz,
 
 static TEE_Result read_value(char *name, uint32_t name_sz,
 			     char *value, uint32_t value_sz,
-			     uint32_t *count)
+			     size_t *count)
 {
 	TEE_ObjectHandle h = TEE_HANDLE_NULL;
 	TEE_Result res = TEE_SUCCESS;
@@ -168,7 +168,7 @@ static bool is_rollback_protected(void)
 	TEE_Result res = TEE_SUCCESS;
 	uint32_t value_sz = MAX_SIMPLE_VALUE_SIZE;
 	char value[MAX_SIMPLE_VALUE_SIZE];
-	uint32_t count;
+	size_t count;
 
 	res = read_value(ROLLBACK_PROT, strlen(ROLLBACK_PROT) + 1,
 			value, value_sz, &count);
@@ -186,7 +186,7 @@ static bool is_version_incremental(char *new_ver_str,
 {
 	TEE_Result res = TEE_SUCCESS;
 	char value[MAX_SIMPLE_VALUE_SIZE];
-	uint32_t count;
+	size_t count;
 	uint64_t current_ver, new_ver;
 
 	res = read_value(BOOTFIRM_VER, strlen(BOOTFIRM_VER) + 1,
@@ -303,7 +303,7 @@ static TEE_Result read_persist_value(uint32_t pt,
 	char *name_buf = NULL;
 	uint32_t value_sz = 0;
 	char *value = NULL;
-	uint32_t count = 0;
+	size_t count = 0;
 
 	if (pt != exp_pt)
 		return TEE_ERROR_BAD_PARAMETERS;
